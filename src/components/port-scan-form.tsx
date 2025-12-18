@@ -11,21 +11,22 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { AlertCircle, Scan } from 'lucide-react';
+import { AlertCircle, Scan, Target, Cpu, Shield } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Slider } from "@/components/ui/slider";
 
 // Esquema de validación con Zod
 const PortScanSchema = z.object({
   startIP: z.string()
-    .min(1, "La IP inicial es requerida")
-    .regex(/^(\d{1,3}\.){3}\d{1,3}$/, "Formato de IP inválido (ej: 192.168.1.1)"),
+    .min(1, "IP address required")
+    .regex(/^(\d{1,3}\.){3}\d{1,3}$/, "Invalid IP format (e.g., 8.8.8.8)"),
   endIP: z.string()
-    .min(1, "La IP final es requerida")
-    .regex(/^(\d{1,3}\.){3}\d{1,3}$/, "Formato de IP inválido (ej: 192.168.1.100)"),
+    .min(1, "IP address required")
+    .regex(/^(\d{1,3}\.){3}\d{1,3}$/, "Invalid IP format (e.g., 8.8.8.10)"),
   portRange: z.string().optional(),
-  scanType: z.enum(["quick", "full", "custom"]),
+  scanType: z.enum(["stealth", "aggressive", "comprehensive", "custom"]),
   timeout: z.number().min(100).max(10000),
-  maxConcurrent: z.number().min(1).max(100),
+  maxConcurrent: z.number().min(1).max(200),
 });
 
 type PortScanFormValues = z.infer<typeof PortScanSchema>;
@@ -36,113 +37,198 @@ interface PortScanFormProps {
 }
 
 export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => {
-  const [scanType, setScanType] = useState<"quick" | "full" | "custom">("quick");
+  const [scanType, setScanType] = useState<"stealth" | "aggressive" | "comprehensive" | "custom">("stealth");
   const [useCommonPorts, setUseCommonPorts] = useState(true);
   const [timeout, setTimeout] = useState(1000);
-  const [maxConcurrent, setMaxConcurrent] = useState(10);
+  const [maxConcurrent, setMaxConcurrent] = useState(50);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<PortScanFormValues>({
     resolver: zodResolver(PortScanSchema),
     defaultValues: {
-      startIP: "192.168.1.1",
-      endIP: "192.168.1.10",
-      portRange: useCommonPorts ? "21,22,23,25,53,80,110,143,443,465,587,993,995,3389" : "1-1024",
-      scanType: "quick",
+      startIP: "8.8.8.8",
+      endIP: "8.8.8.8",
+      portRange: useCommonPorts ? "21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443" : "1-1024",
+      scanType: "stealth",
       timeout: 1000,
-      maxConcurrent: 10,
+      maxConcurrent: 50,
     }
   });
 
   const onSubmit = (data: PortScanFormValues) => {
-    console.log("Datos del escaneo:", data);
+    console.log("[FORM_SUBMIT] Scan configuration:", data);
     onScanStart(data.startIP, data.endIP);
   };
 
-  const handleScanTypeChange = (value: "quick" | "full" | "custom") => {
+  const handleScanTypeChange = (value: "stealth" | "aggressive" | "comprehensive" | "custom") => {
     setScanType(value);
     setValue("scanType", value);
     
     // Ajustar configuración según el tipo de escaneo
     switch (value) {
-      case "quick":
+      case "stealth":
+        setUseCommonPorts(true);
+        setTimeout(1500);
+        setMaxConcurrent(10);
+        setValue("timeout", 1500);
+        setValue("maxConcurrent", 10);
+        break;
+      case "aggressive":
         setUseCommonPorts(true);
         setTimeout(500);
-        setMaxConcurrent(20);
+        setMaxConcurrent(100);
         setValue("timeout", 500);
+        setValue("maxConcurrent", 100);
+        break;
+      case "comprehensive":
+        setUseCommonPorts(false);
+        setTimeout(3000);
+        setMaxConcurrent(20);
+        setValue("timeout", 3000);
         setValue("maxConcurrent", 20);
         break;
-      case "full":
-        setUseCommonPorts(false);
-        setTimeout(2000);
-        setMaxConcurrent(5);
-        setValue("timeout", 2000);
-        setValue("maxConcurrent", 5);
-        break;
       case "custom":
-        // Mantener valores actuales
+        setShowAdvanced(true);
         break;
     }
   };
 
+  const commonTargets = [
+    { label: "Google DNS", value: "8.8.8.8" },
+    { label: "Cloudflare", value: "1.1.1.1" },
+    { label: "Local Network", value: "192.168.1.1" },
+  ];
+
   return (
     <form className={cn("space-y-6")} onSubmit={handleSubmit(onSubmit)}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* IP Inicial */}
-        <div className="space-y-2">
-          <Label htmlFor="startIP">IP Inicial *</Label>
-          <Input
-            id="startIP"
-            placeholder="192.168.1.1"
-            {...register('startIP')}
-            className={errors.startIP ? "border-destructive" : ""}
-          />
-          {errors.startIP && (
-            <p className="text-sm text-destructive">{errors.startIP.message}</p>
-          )}
+      {/* Target Selection */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Label className="font-mono text-green-300 flex items-center gap-2">
+            <Target className="h-4 w-4" />
+            TARGET_SELECTION
+          </Label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-xs text-green-400 hover:text-green-300"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            {showAdvanced ? "HIDE_ADVANCED" : "SHOW_ADVANCED"}
+          </Button>
         </div>
 
-        {/* IP Final */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* IP Inicial */}
+          <div className="space-y-2">
+            <Label htmlFor="startIP" className="text-gray-400 font-mono text-sm">START_IP *</Label>
+            <Input
+              id="startIP"
+              placeholder="8.8.8.8"
+              {...register('startIP')}
+              className={cn(
+                "terminal-input",
+                errors.startIP ? "border-red-500" : "border-green-500/30"
+              )}
+            />
+            {errors.startIP && (
+              <p className="text-sm text-red-400 font-mono">{errors.startIP.message}</p>
+            )}
+          </div>
+
+          {/* IP Final */}
+          <div className="space-y-2">
+            <Label htmlFor="endIP" className="text-gray-400 font-mono text-sm">END_IP *</Label>
+            <Input
+              id="endIP"
+              placeholder="8.8.8.10"
+              {...register('endIP')}
+              className={cn(
+                "terminal-input",
+                errors.endIP ? "border-red-500" : "border-green-500/30"
+              )}
+            />
+            {errors.endIP && (
+              <p className="text-sm text-red-400 font-mono">{errors.endIP.message}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Targets */}
         <div className="space-y-2">
-          <Label htmlFor="endIP">IP Final *</Label>
-          <Input
-            id="endIP"
-            placeholder="192.168.1.100"
-            {...register('endIP')}
-            className={errors.endIP ? "border-destructive" : ""}
-          />
-          {errors.endIP && (
-            <p className="text-sm text-destructive">{errors.endIP.message}</p>
-          )}
+          <Label className="text-gray-400 font-mono text-sm">QUICK_TARGETS</Label>
+          <div className="flex flex-wrap gap-2">
+            {commonTargets.map((target) => (
+              <Button
+                key={target.value}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-green-900 text-green-400 hover:bg-green-950 font-mono text-xs"
+                onClick={() => {
+                  setValue("startIP", target.value);
+                  setValue("endIP", target.value);
+                }}
+              >
+                {target.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Tipo de Escaneo */}
+      {/* Scan Type */}
       <div className="space-y-2">
-        <Label>Tipo de Escaneo</Label>
-        <Select value={scanType} onValueChange={(value: "quick" | "full" | "custom") => handleScanTypeChange(value)}>
-          <SelectTrigger>
-            <SelectValue placeholder="Selecciona un tipo de escaneo" />
+        <Label className="font-mono text-green-300 flex items-center gap-2">
+          <Cpu className="h-4 w-4" />
+          SCAN_TYPE
+        </Label>
+        <Select value={scanType} onValueChange={(value: "stealth" | "aggressive" | "comprehensive" | "custom") => handleScanTypeChange(value)}>
+          <SelectTrigger className="terminal-input border-green-500/30">
+            <SelectValue placeholder="Select scan type" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="quick">Escaneo Rápido (puertos comunes)</SelectItem>
-            <SelectItem value="full">Escaneo Completo (todos los puertos)</SelectItem>
-            <SelectItem value="custom">Personalizado</SelectItem>
+          <SelectContent className="bg-gray-900 border border-green-500/30">
+            <SelectItem value="stealth" className="font-mono hover:bg-green-950 focus:bg-green-950">
+              <div className="flex items-center gap-2">
+                <Shield className="h-3 w-3 text-green-400" />
+                STEALTH (Slow, undetectable)
+              </div>
+            </SelectItem>
+            <SelectItem value="aggressive" className="font-mono hover:bg-red-950 focus:bg-red-950">
+              <div className="flex items-center gap-2">
+                <Scan className="h-3 w-3 text-red-400" />
+                AGGRESSIVE (Fast, may trigger alarms)
+              </div>
+            </SelectItem>
+            <SelectItem value="comprehensive" className="font-mono hover:bg-blue-950 focus:bg-blue-950">
+              <div className="flex items-center gap-2">
+                <Target className="h-3 w-3 text-blue-400" />
+                COMPREHENSIVE (Full analysis)
+              </div>
+            </SelectItem>
+            <SelectItem value="custom" className="font-mono hover:bg-yellow-950 focus:bg-yellow-950">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-3 w-3 text-yellow-400" />
+                CUSTOM (Manual configuration)
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* Configuración avanzada */}
-      {scanType === "custom" && (
-        <Card>
+      {(showAdvanced || scanType === "custom") && (
+        <Card className="hacker-card border-green-500/30">
           <CardHeader>
-            <CardTitle className="text-sm">Configuración Avanzada</CardTitle>
+            <CardTitle className="text-sm font-mono text-green-300">ADVANCED_CONFIG</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Puertos Comunes</Label>
-                <p className="text-sm text-muted-foreground">
-                  Escanear solo los puertos más utilizados
+                <Label className="font-mono text-gray-400">COMMON_PORTS_ONLY</Label>
+                <p className="text-xs text-gray-500">
+                  Scan only frequently used ports
                 </p>
               </div>
               <Switch
@@ -150,57 +236,61 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                 onCheckedChange={(checked) => {
                   setUseCommonPorts(checked);
                   setValue("portRange", checked 
-                    ? "21,22,23,25,53,80,110,143,443,465,587,993,995,3389" 
+                    ? "21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443" 
                     : "1-1024");
                 }}
+                className="data-[state=checked]:bg-green-500"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="portRange">Rango de Puertos</Label>
+              <Label htmlFor="portRange" className="font-mono text-gray-400">PORT_RANGE</Label>
               <Input
                 id="portRange"
-                placeholder={useCommonPorts ? "Puertos comunes" : "1-1024"}
+                placeholder={useCommonPorts ? "Common ports" : "1-1024"}
                 {...register('portRange')}
                 disabled={!useCommonPorts}
+                className="terminal-input"
               />
-              <p className="text-xs text-muted-foreground">
-                Formato: 80,443,8080 o 1-1000
+              <p className="text-xs text-gray-500 font-mono">
+                Format: 80,443,8080 or 1-1000
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="timeout">Timeout (ms)</Label>
-                <Input
-                  id="timeout"
-                  type="number"
-                  min="100"
-                  max="10000"
-                  step="100"
-                  value={timeout}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
+                <div className="flex justify-between">
+                  <Label className="font-mono text-gray-400">TIMEOUT: {timeout}ms</Label>
+                  <span className="text-xs text-gray-500">{timeout < 1000 ? "FAST" : timeout < 3000 ? "BALANCED" : "STEALTH"}</span>
+                </div>
+                <Slider
+                  min={100}
+                  max={5000}
+                  step={100}
+                  value={[timeout]}
+                  onValueChange={([value]) => {
                     setTimeout(value);
                     setValue("timeout", value);
                   }}
+                  className="[&>span]:bg-green-500"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="maxConcurrent">Máx. Conexiones</Label>
-                <Input
-                  id="maxConcurrent"
-                  type="number"
-                  min="1"
-                  max="100"
-                  step="1"
-                  value={maxConcurrent}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
+                <div className="flex justify-between">
+                  <Label className="font-mono text-gray-400">CONCURRENT_CONNECTIONS: {maxConcurrent}</Label>
+                  <span className="text-xs text-gray-500">{maxConcurrent < 20 ? "LOW" : maxConcurrent < 80 ? "MEDIUM" : "HIGH"}</span>
+                </div>
+                <Slider
+                  min={1}
+                  max={200}
+                  step={1}
+                  value={[maxConcurrent]}
+                  onValueChange={([value]) => {
                     setMaxConcurrent(value);
                     setValue("maxConcurrent", value);
                   }}
+                  className="[&>span]:bg-green-500"
                 />
               </div>
             </div>
@@ -210,10 +300,10 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
 
       {/* Alertas de validación */}
       {(errors.startIP || errors.endIP) && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Por favor, corrige los errores en el formulario antes de continuar.
+        <Alert variant="destructive" className="border-red-500/30 bg-red-950/30">
+          <AlertCircle className="h-4 w-4 text-red-400" />
+          <AlertDescription className="text-red-300 font-mono">
+            ERROR: Correct configuration errors before proceeding.
           </AlertDescription>
         </Alert>
       )}
@@ -222,22 +312,25 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
       <div className="pt-4">
         <Button 
           type="submit" 
-          className="w-full" 
+          className="w-full hacker-card border-green-500 hover:border-green-400 hover:scale-[1.02] transition-all"
           size="lg"
           disabled={isScanning || Object.keys(errors).length > 0}
         >
           {isScanning ? (
             <>
-              <Scan className="mr-2 h-4 w-4 animate-spin" />
-              Escaneando...
+              <Scan className="mr-2 h-5 w-5 animate-spin" />
+              <span className="font-mono">SCANNING_IN_PROGRESS...</span>
             </>
           ) : (
             <>
-              <Scan className="mr-2 h-4 w-4" />
-              Iniciar Escaneo
+              <Scan className="mr-2 h-5 w-5" />
+              <span className="font-mono">INITIATE_SCAN</span>
             </>
           )}
         </Button>
+        <p className="text-center text-xs text-gray-500 mt-2 font-mono">
+          Estimated time: {scanType === "stealth" ? "2-5min" : scanType === "aggressive" ? "30-60s" : "5-10min"}
+        </p>
       </div>
     </form>
   );
