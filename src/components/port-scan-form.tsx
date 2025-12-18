@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { AlertCircle, Scan, Target, Cpu, Shield, Zap, Globe } from 'lucide-react';
+import { AlertCircle, Scan, Target, Cpu, Shield, Zap, Globe, Server } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Slider } from "@/components/ui/slider";
 
@@ -42,17 +42,17 @@ interface PortScanFormProps {
     maxConcurrent: number;
   }) => void;
   isScanning: boolean;
+  disabled?: boolean;
 }
 
-export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => {
+export const PortScanForm = ({ onScanStart, isScanning, disabled = false }: PortScanFormProps) => {
   const [scanType, setScanType] = useState<"stealth" | "aggressive" | "comprehensive" | "custom">("stealth");
   const [useCommonPorts, setUseCommonPorts] = useState(true);
   const [timeout, setTimeout] = useState(1500);
   const [maxConcurrent, setMaxConcurrent] = useState(5);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isValidTarget, setIsValidTarget] = useState(true);
 
-  const { register, handleSubmit, formState: { errors }, setValue, watch, trigger } = useForm<PortScanFormValues>({
+  const { register, handleSubmit, formState: { errors }, setValue, trigger } = useForm<PortScanFormValues>({
     resolver: zodResolver(PortScanSchema),
     defaultValues: {
       startIP: "",
@@ -169,6 +169,16 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
 
   return (
     <form className={cn("space-y-6")} onSubmit={handleSubmit(onSubmit)}>
+      {/* Server Status Warning */}
+      {disabled && (
+        <Alert className="border-yellow-500/30 bg-yellow-950/20">
+          <Server className="h-4 w-4 text-yellow-500" />
+          <AlertDescription className="text-yellow-300 text-sm">
+            Scan server is offline. Real scans are disabled until server is available.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Target Selection */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -182,6 +192,7 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
             size="sm"
             className="text-xs text-green-400 hover:text-green-300"
             onClick={() => setShowAdvanced(!showAdvanced)}
+            disabled={disabled}
           >
             {showAdvanced ? "HIDE_ADVANCED" : "SHOW_ADVANCED"}
           </Button>
@@ -197,13 +208,15 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
               {...register('startIP')}
               className={cn(
                 "terminal-input",
-                errors.startIP ? "border-red-500" : "border-green-500/30"
+                errors.startIP ? "border-red-500" : "border-green-500/30",
+                disabled && "opacity-50 cursor-not-allowed"
               )}
               onChange={(e) => {
                 setValue("startIP", e.target.value);
                 setValue("endIP", e.target.value); // Auto-fill end IP
                 trigger("startIP");
               }}
+              disabled={disabled}
             />
             {errors.startIP ? (
               <p className="text-sm text-red-400 font-mono">{errors.startIP.message}</p>
@@ -221,8 +234,10 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
               {...register('endIP')}
               className={cn(
                 "terminal-input",
-                errors.endIP ? "border-red-500" : "border-green-500/30"
+                errors.endIP ? "border-red-500" : "border-green-500/30",
+                disabled && "opacity-50 cursor-not-allowed"
               )}
+              disabled={disabled}
             />
             {errors.endIP && (
               <p className="text-sm text-red-400 font-mono">{errors.endIP.message}</p>
@@ -246,6 +261,7 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                   setValue("endIP", target.value);
                   trigger("startIP");
                 }}
+                disabled={disabled}
               >
                 <span className="flex items-center gap-1">
                   {target.icon}
@@ -263,8 +279,8 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
           <Cpu className="h-4 w-4" />
           SCAN_TYPE
         </Label>
-        <Select value={scanType} onValueChange={(value: "stealth" | "aggressive" | "comprehensive" | "custom") => handleScanTypeChange(value)}>
-          <SelectTrigger className="terminal-input border-green-500/30">
+        <Select value={scanType} onValueChange={(value: "stealth" | "aggressive" | "comprehensive" | "custom") => handleScanTypeChange(value)} disabled={disabled}>
+          <SelectTrigger className={cn("terminal-input border-green-500/30", disabled && "opacity-50 cursor-not-allowed")}>
             <SelectValue placeholder="Select scan type" />
           </SelectTrigger>
           <SelectContent className="bg-gray-900 border border-green-500/30">
@@ -319,6 +335,7 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                     : "1-1024");
                 }}
                 className="data-[state=checked]:bg-green-500"
+                disabled={disabled}
               />
             </div>
 
@@ -328,7 +345,8 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                 id="portRange"
                 placeholder={useCommonPorts ? "Common ports" : "1-1024"}
                 {...register('portRange')}
-                className="terminal-input"
+                className={cn("terminal-input", disabled && "opacity-50 cursor-not-allowed")}
+                disabled={disabled}
               />
               <div className="flex flex-wrap gap-2 mt-2">
                 {portPresets.map((preset) => (
@@ -341,6 +359,7 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                     onClick={() => {
                       setValue("portRange", preset.value);
                     }}
+                    disabled={disabled}
                   >
                     {preset.label}
                   </Button>
@@ -367,6 +386,7 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                     setValue("timeout", value);
                   }}
                   className="[&>span]:bg-green-500"
+                  disabled={disabled}
                 />
               </div>
 
@@ -385,6 +405,7 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                     setValue("maxConcurrent", value);
                   }}
                   className="[&>span]:bg-green-500"
+                  disabled={disabled}
                 />
                 <p className="text-xs text-gray-500">
                   Higher values are faster but may trigger firewalls
@@ -409,7 +430,7 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
       <Alert className="border-yellow-500/30 bg-yellow-950/20">
         <AlertCircle className="h-4 w-4 text-yellow-500" />
         <AlertDescription className="text-yellow-300 text-sm">
-          This performs real network scans. Only scan targets you own or have permission to test.
+          This performs REAL nmap scans. Only scan targets you own or have permission to test.
         </AlertDescription>
       </Alert>
 
@@ -419,17 +440,17 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
           type="submit" 
           className="w-full hacker-card border-green-500 hover:border-green-400 hover:scale-[1.02] transition-all"
           size="lg"
-          disabled={isScanning || Object.keys(errors).length > 0}
+          disabled={isScanning || Object.keys(errors).length > 0 || disabled}
         >
           {isScanning ? (
             <>
               <Scan className="mr-2 h-5 w-5 animate-spin" />
-              <span className="font-mono">SCANNING_IN_PROGRESS...</span>
+              <span className="font-mono">REAL_SCANNING_IN_PROGRESS...</span>
             </>
           ) : (
             <>
               <Scan className="mr-2 h-5 w-5" />
-              <span className="font-mono">INITIATE_REAL_SCAN</span>
+              <span className="font-mono">INITIATE_REAL_NMAP_SCAN</span>
             </>
           )}
         </Button>
@@ -439,6 +460,11 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
            scanType === "comprehensive" ? "Estimated: 2-5 minutes" : 
            "Time varies by configuration"}
         </p>
+        {disabled && (
+          <p className="text-center text-xs text-red-400 mt-2 font-mono">
+            Scan server offline. Real scans disabled.
+          </p>
+        )}
       </div>
     </form>
   );
