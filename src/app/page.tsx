@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal, AlertCircle, Shield, Lock, Cpu, Scan } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 // Tipo para los resultados del escaneo
 export interface ScanResult {
@@ -18,18 +19,6 @@ export interface ScanResult {
   scanTime: string;
 }
 
-// Datos de ejemplo para demostración (ahora con IPs públicas)
-const sampleResults: ScanResult[] = [
-  { ip: '8.8.8.8', port: 53, status: 'open', service: 'DNS', banner: 'Google Public DNS', scanTime: new Date().toISOString() },
-  { ip: '1.1.1.1', port: 80, status: 'open', service: 'HTTP', banner: 'Cloudflare', scanTime: new Date().toISOString() },
-  { ip: '8.8.4.4', port: 53, status: 'open', service: 'DNS', banner: 'Google Public DNS', scanTime: new Date().toISOString() },
-  { ip: '142.250.185.78', port: 443, status: 'open', service: 'HTTPS', banner: 'Google', scanTime: new Date().toISOString() },
-  { ip: '151.101.1.140', port: 80, status: 'open', service: 'HTTP', banner: 'Reddit', scanTime: new Date().toISOString() },
-  { ip: '104.16.249.249', port: 443, status: 'open', service: 'HTTPS', banner: 'Cloudflare', scanTime: new Date().toISOString() },
-  { ip: '192.0.2.1', port: 22, status: 'filtered', service: 'SSH', scanTime: new Date().toISOString() },
-  { ip: '203.0.113.1', port: 3389, status: 'closed', service: 'RDP', scanTime: new Date().toISOString() },
-];
-
 export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResults, setScanResults] = useState<ScanResult[]>([]);
@@ -40,9 +29,11 @@ export default function Home() {
     filteredPorts: 0
   });
   const [dots, setDots] = useState<Array<{left: string, top: string, delay: string}>>([]);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    // Generar los puntos animados solo en el cliente
+    // Solo se ejecuta en el cliente
+    setIsClient(true);
     const generatedDots = Array.from({ length: 20 }, (_, i) => ({
       left: `${Math.random() * 100}%`,
       top: `${Math.random() * 100}%`,
@@ -51,35 +42,76 @@ export default function Home() {
     setDots(generatedDots);
   }, []);
 
-  const handleScanStart = (startIP: string, endIP: string) => {
-    console.log(`[SCAN_INITIATED] Target range: ${startIP} to ${endIP}`);
+  const handleScanStart = async (scanData: {
+    startIP: string;
+    endIP: string;
+    ports: number[];
+    timeout: number;
+    maxConcurrent: number;
+  }) => {
+    console.log(`[SCAN_INITIATED] Target: ${scanData.startIP} to ${scanData.endIP}, Ports: ${scanData.ports.length}`);
     setIsScanning(true);
-    
-    // Simular escaneo con datos de ejemplo
-    setTimeout(() => {
-      // Filtrar resultados basados en el rango de IP (simulación)
-      const filteredResults = sampleResults.filter(result => {
-        // Simulación simple - en realidad necesitarías lógica de rango de IP
-        return Math.random() > 0.3; // 70% de probabilidad de incluir cada resultado
+    setScanResults([]);
+    setScanStats({
+      totalScanned: 0,
+      openPorts: 0,
+      closedPorts: 0,
+      filteredPorts: 0
+    });
+
+    // Mostrar toast de inicio
+    toast.info('Iniciando escaneo de puertos...', {
+      description: `Escaneando ${scanData.startIP} - ${scanData.ports.length} puertos`
+    });
+
+    try {
+      // Por ahora, solo escaneamos el startIP. Para un rango, necesitaríamos iterar.
+      const response = await fetch('/api/scan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          host: scanData.startIP,
+          ports: scanData.ports,
+          timeout: scanData.timeout,
+          maxConcurrent: scanData.maxConcurrent
+        }),
       });
-      
-      setScanResults(filteredResults);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error en el escaneo');
+      }
+
+      const data = await response.json();
+      const results: ScanResult[] = data.results;
+
+      setScanResults(results);
       
       // Calcular estadísticas
-      const openPorts = filteredResults.filter(r => r.status === 'open').length;
-      const closedPorts = filteredResults.filter(r => r.status === 'closed').length;
-      const filteredPorts = filteredResults.filter(r => r.status === 'filtered').length;
+      const openPorts = results.filter(r => r.status === 'open').length;
+      const closedPorts = results.filter(r => r.status === 'closed').length;
+      const filteredPorts = results.filter(r => r.status === 'filtered').length;
       
       setScanStats({
-        totalScanned: filteredResults.length,
+        totalScanned: results.length,
         openPorts,
         closedPorts,
         filteredPorts
       });
-      
+
+      toast.success('Escaneo completado', {
+        description: `Encontrados ${openPorts} puertos abiertos en ${scanData.startIP}`
+      });
+    } catch (error: any) {
+      console.error('Error en el escaneo:', error);
+      toast.error('Error en el escaneo', {
+        description: error.message || 'No se pudo completar el escaneo. Inténtalo de nuevo.'
+      });
+    } finally {
       setIsScanning(false);
-      console.log(`[SCAN_COMPLETE] Found ${openPorts} open ports`);
-    }, 3000);
+    }
   };
 
   const handleClearResults = () => {
@@ -91,6 +123,7 @@ export default function Home() {
       filteredPorts: 0
     });
     console.log('[SCAN_CLEARED] Results cleared');
+    toast.info('Resultados eliminados');
   };
 
   const handleExportResults = () => {
@@ -105,6 +138,7 @@ export default function Home() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     console.log('[EXPORT] Results exported as JSON');
+    toast.success('Resultados exportados como JSON');
   };
 
   const handleExportCSV = () => {
@@ -131,25 +165,28 @@ export default function Home() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     console.log('[EXPORT] Results exported as CSV');
+    toast.success('Resultados exportados como CSV');
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-900">
-      {/* Animated background elements */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        {dots.map((dot, i) => (
-          <div
-            key={i}
-            className="absolute w-[1px] h-[1px] bg-green-500 animate-pulse"
-            style={{
-              left: dot.left,
-              top: dot.top,
-              animationDelay: dot.delay,
-              boxShadow: '0 0 10px 2px #22c55e'
-            }}
-          />
-        ))}
-      </div>
+      {/* Animated background elements - solo renderizar en cliente */}
+      {isClient && (
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+          {dots.map((dot, i) => (
+            <div
+              key={i}
+              className="absolute w-[1px] h-[1px] bg-green-500 animate-pulse"
+              style={{
+                left: dot.left,
+                top: dot.top,
+                animationDelay: dot.delay,
+                boxShadow: '0 0 10px 2px #22c55e'
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="container mx-auto px-4 py-8 max-w-7xl relative z-10">
         {/* Header */}

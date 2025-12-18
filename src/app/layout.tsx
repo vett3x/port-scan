@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -34,6 +35,15 @@ export default function RootLayout({
         
         {/* Terminal style border */}
         <div className="fixed inset-0 border-2 border-green-900/30 pointer-events-none z-30"></div>
+        
+        {/* Toaster for notifications */}
+        <Toaster 
+          position="top-right"
+          expand={false}
+          richColors
+          closeButton
+          theme="dark"
+        />
       </body>
     </html>
   );

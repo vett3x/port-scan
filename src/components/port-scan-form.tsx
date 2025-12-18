@@ -32,7 +32,13 @@ const PortScanSchema = z.object({
 type PortScanFormValues = z.infer<typeof PortScanSchema>;
 
 interface PortScanFormProps {
-  onScanStart: (startIP: string, endIP: string) => void;
+  onScanStart: (data: {
+    startIP: string;
+    endIP: string;
+    ports: number[];
+    timeout: number;
+    maxConcurrent: number;
+  }) => void;
   isScanning: boolean;
 }
 
@@ -57,7 +63,39 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
 
   const onSubmit = (data: PortScanFormValues) => {
     console.log("[FORM_SUBMIT] Scan configuration:", data);
-    onScanStart(data.startIP, data.endIP);
+    
+    // Parsear los puertos
+    let ports: number[] = [];
+    if (data.portRange) {
+      if (data.portRange.includes(',')) {
+        ports = data.portRange.split(',').map(port => parseInt(port.trim())).filter(port => !isNaN(port));
+      } else if (data.portRange.includes('-')) {
+        const [start, end] = data.portRange.split('-').map(port => parseInt(port.trim()));
+        if (!isNaN(start) && !isNaN(end) && start <= end) {
+          for (let port = start; port <= end; port++) {
+            ports.push(port);
+          }
+        }
+      } else {
+        const port = parseInt(data.portRange);
+        if (!isNaN(port)) {
+          ports = [port];
+        }
+      }
+    }
+    
+    // Si no se pudieron parsear puertos, usar los comunes
+    if (ports.length === 0) {
+      ports = [21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443];
+    }
+    
+    onScanStart({
+      startIP: data.startIP,
+      endIP: data.endIP,
+      ports,
+      timeout: data.timeout,
+      maxConcurrent: data.maxConcurrent,
+    });
   };
 
   const handleScanTypeChange = (value: "stealth" | "aggressive" | "comprehensive" | "custom") => {
