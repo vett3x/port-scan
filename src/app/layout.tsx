@@ -16,47 +16,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <head>
-        <style>{`
-          @keyframes scanline {
-            0% {
-              transform: translateY(-100%);
-            }
-            100% {
-              transform: translateY(100vh);
-            }
-          }
-          @keyframes glitch {
-            0% {
-              transform: translate(0);
-            }
-            20% {
-              transform: translate(-2px, 2px);
-            }
-            40% {
-              transform: translate(-2px, -2px);
-            }
-            60% {
-              transform: translate(2px, 2px);
-            }
-            80% {
-              transform: translate(2px, -2px);
-            }
-            100% {
-              transform: translate(0);
-            }
-          }
-          @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-          }
-        `}</style>
-      </head>
       <body className={`${inter.className} bg-gray-950 text-gray-100 antialiased overflow-x-hidden`}>
         {/* Scanline effect */}
         <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-green-500 opacity-10 animate-scanline" 
-               style={{animation: 'scanline 8s linear infinite'}}></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-green-500 opacity-10 animate-scanline"></div>
         </div>
         
         {/* Glitch effect overlay */}

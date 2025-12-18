@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { PortScanForm } from '@/components/port-scan-form';
 import { PortScanResults } from '@/components/port-scan-results';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,6 +39,17 @@ export default function Home() {
     closedPorts: 0,
     filteredPorts: 0
   });
+  const [dots, setDots] = useState<Array<{left: string, top: string, delay: string}>>([]);
+
+  useEffect(() => {
+    // Generar los puntos animados solo en el cliente
+    const generatedDots = Array.from({ length: 20 }, (_, i) => ({
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 100}%`,
+      delay: `${Math.random() * 5}s`
+    }));
+    setDots(generatedDots);
+  }, []);
 
   const handleScanStart = (startIP: string, endIP: string) => {
     console.log(`[SCAN_INITIATED] Target range: ${startIP} to ${endIP}`);
@@ -126,14 +137,14 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-900">
       {/* Animated background elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        {[...Array(20)].map((_, i) => (
+        {dots.map((dot, i) => (
           <div
             key={i}
             className="absolute w-[1px] h-[1px] bg-green-500 animate-pulse"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
+              left: dot.left,
+              top: dot.top,
+              animationDelay: dot.delay,
               boxShadow: '0 0 10px 2px #22c55e'
             }}
           />
