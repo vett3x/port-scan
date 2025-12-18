@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ScanResult } from "@/app/scan-ports/page";
+import { ScanResult } from "@/types/scan";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
