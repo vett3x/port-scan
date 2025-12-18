@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { AlertCircle, Scan, Target, Cpu, Shield } from 'lucide-react';
+import { AlertCircle, Scan, Target, Cpu, Shield, Zap, Globe } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Slider } from "@/components/ui/slider";
 
@@ -19,14 +19,16 @@ import { Slider } from "@/components/ui/slider";
 const PortScanSchema = z.object({
   startIP: z.string()
     .min(1, "IP address required")
-    .regex(/^(\d{1,3}\.){3}\d{1,3}$/, "Invalid IP format (e.g., 8.8.8.8)"),
+    .regex(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/, 
+      "Invalid IP or domain format (e.g., 8.8.8.8 or example.com)"),
   endIP: z.string()
     .min(1, "IP address required")
-    .regex(/^(\d{1,3}\.){3}\d{1,3}$/, "Invalid IP format (e.g., 8.8.8.10)"),
+    .regex(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/, 
+      "Invalid IP or domain format"),
   portRange: z.string().optional(),
   scanType: z.enum(["stealth", "aggressive", "comprehensive", "custom"]),
-  timeout: z.number().min(100).max(10000),
-  maxConcurrent: z.number().min(1).max(200),
+  timeout: z.number().min(500).max(10000),
+  maxConcurrent: z.number().min(1).max(10), // Limitar a 10 por seguridad
 });
 
 type PortScanFormValues = z.infer<typeof PortScanSchema>;
@@ -45,40 +47,49 @@ interface PortScanFormProps {
 export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => {
   const [scanType, setScanType] = useState<"stealth" | "aggressive" | "comprehensive" | "custom">("stealth");
   const [useCommonPorts, setUseCommonPorts] = useState(true);
-  const [timeout, setTimeout] = useState(1000);
-  const [maxConcurrent, setMaxConcurrent] = useState(50);
+  const [timeout, setTimeout] = useState(1500);
+  const [maxConcurrent, setMaxConcurrent] = useState(5);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isValidTarget, setIsValidTarget] = useState(true);
 
-  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<PortScanFormValues>({
+  const { register, handleSubmit, formState: { errors }, setValue, watch, trigger } = useForm<PortScanFormValues>({
     resolver: zodResolver(PortScanSchema),
     defaultValues: {
-      startIP: "8.8.8.8",
-      endIP: "8.8.8.8",
-      portRange: useCommonPorts ? "21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443" : "1-1024",
+      startIP: "",
+      endIP: "",
+      portRange: "21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443",
       scanType: "stealth",
-      timeout: 1000,
-      maxConcurrent: 50,
+      timeout: 1500,
+      maxConcurrent: 5,
     }
   });
 
-  const onSubmit = (data: PortScanFormValues) => {
+  const onSubmit = async (data: PortScanFormValues) => {
     console.log("[FORM_SUBMIT] Scan configuration:", data);
+    
+    // Validar que no sea localhost
+    if (data.startIP === 'localhost' || data.startIP === '127.0.0.1') {
+      toast.error('Security restriction', {
+        description: 'Scanning localhost is not allowed'
+      });
+      return;
+    }
     
     // Parsear los puertos
     let ports: number[] = [];
     if (data.portRange) {
       if (data.portRange.includes(',')) {
-        ports = data.portRange.split(',').map(port => parseInt(port.trim())).filter(port => !isNaN(port));
+        ports = data.portRange.split(',').map(port => parseInt(port.trim())).filter(port => !isNaN(port) && port > 0 && port <= 65535);
       } else if (data.portRange.includes('-')) {
         const [start, end] = data.portRange.split('-').map(port => parseInt(port.trim()));
-        if (!isNaN(start) && !isNaN(end) && start <= end) {
-          for (let port = start; port <= end; port++) {
+        if (!isNaN(start) && !isNaN(end) && start <= end && start > 0 && end <= 65535) {
+          for (let port = start; port <= Math.min(end, start + 100); port++) { // Limitar rango
             ports.push(port);
           }
         }
       } else {
         const port = parseInt(data.portRange);
-        if (!isNaN(port)) {
+        if (!isNaN(port) && port > 0 && port <= 65535) {
           ports = [port];
         }
       }
@@ -89,10 +100,19 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
       ports = [21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443];
     }
     
+    // Limitar número de puertos
+    const limitedPorts = ports.slice(0, 50);
+    
+    if (limitedPorts.length < ports.length) {
+      toast.warning('Port limit applied', {
+        description: `Limited to 50 ports for performance`
+      });
+    }
+    
     onScanStart({
       startIP: data.startIP,
       endIP: data.endIP,
-      ports,
+      ports: limitedPorts,
       timeout: data.timeout,
       maxConcurrent: data.maxConcurrent,
     });
@@ -106,24 +126,27 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
     switch (value) {
       case "stealth":
         setUseCommonPorts(true);
-        setTimeout(1500);
-        setMaxConcurrent(10);
-        setValue("timeout", 1500);
-        setValue("maxConcurrent", 10);
+        setTimeout(2000);
+        setMaxConcurrent(3);
+        setValue("timeout", 2000);
+        setValue("maxConcurrent", 3);
+        setValue("portRange", "21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443");
         break;
       case "aggressive":
         setUseCommonPorts(true);
-        setTimeout(500);
-        setMaxConcurrent(100);
-        setValue("timeout", 500);
-        setValue("maxConcurrent", 100);
+        setTimeout(800);
+        setMaxConcurrent(8);
+        setValue("timeout", 800);
+        setValue("maxConcurrent", 8);
+        setValue("portRange", "21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443");
         break;
       case "comprehensive":
         setUseCommonPorts(false);
         setTimeout(3000);
-        setMaxConcurrent(20);
+        setMaxConcurrent(2);
         setValue("timeout", 3000);
-        setValue("maxConcurrent", 20);
+        setValue("maxConcurrent", 2);
+        setValue("portRange", "1-1024");
         break;
       case "custom":
         setShowAdvanced(true);
@@ -132,9 +155,16 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
   };
 
   const commonTargets = [
-    { label: "Google DNS", value: "8.8.8.8" },
-    { label: "Cloudflare", value: "1.1.1.1" },
-    { label: "Local Network", value: "192.168.1.1" },
+    { label: "Google DNS", value: "8.8.8.8", icon: <Globe className="h-3 w-3" /> },
+    { label: "Cloudflare", value: "1.1.1.1", icon: <Zap className="h-3 w-3" /> },
+    { label: "OpenDNS", value: "208.67.222.222", icon: <Shield className="h-3 w-3" /> },
+  ];
+
+  const portPresets = [
+    { label: "Common Ports", value: "21,22,23,25,53,80,110,143,443,465,587,993,995,3389,8080,8443" },
+    { label: "Web Servers", value: "80,443,8080,8443,8888" },
+    { label: "Database", value: "3306,5432,27017,6379" },
+    { label: "Remote Access", value: "22,23,3389,5900" },
   ];
 
   return (
@@ -160,27 +190,34 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* IP Inicial */}
           <div className="space-y-2">
-            <Label htmlFor="startIP" className="text-gray-400 font-mono text-sm">START_IP *</Label>
+            <Label htmlFor="startIP" className="text-gray-400 font-mono text-sm">TARGET_IP/DOMAIN *</Label>
             <Input
               id="startIP"
-              placeholder="8.8.8.8"
+              placeholder="8.8.8.8 or example.com"
               {...register('startIP')}
               className={cn(
                 "terminal-input",
                 errors.startIP ? "border-red-500" : "border-green-500/30"
               )}
+              onChange={(e) => {
+                setValue("startIP", e.target.value);
+                setValue("endIP", e.target.value); // Auto-fill end IP
+                trigger("startIP");
+              }}
             />
-            {errors.startIP && (
+            {errors.startIP ? (
               <p className="text-sm text-red-400 font-mono">{errors.startIP.message}</p>
+            ) : (
+              <p className="text-xs text-gray-500">Enter IP address or domain name</p>
             )}
           </div>
 
           {/* IP Final */}
           <div className="space-y-2">
-            <Label htmlFor="endIP" className="text-gray-400 font-mono text-sm">END_IP *</Label>
+            <Label htmlFor="endIP" className="text-gray-400 font-mono text-sm">END_IP (Optional)</Label>
             <Input
               id="endIP"
-              placeholder="8.8.8.10"
+              placeholder="Same as target"
               {...register('endIP')}
               className={cn(
                 "terminal-input",
@@ -207,9 +244,13 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                 onClick={() => {
                   setValue("startIP", target.value);
                   setValue("endIP", target.value);
+                  trigger("startIP");
                 }}
               >
-                {target.label}
+                <span className="flex items-center gap-1">
+                  {target.icon}
+                  {target.label}
+                </span>
               </Button>
             ))}
           </div>
@@ -230,19 +271,19 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
             <SelectItem value="stealth" className="font-mono hover:bg-green-950 focus:bg-green-950">
               <div className="flex items-center gap-2">
                 <Shield className="h-3 w-3 text-green-400" />
-                STEALTH (Slow, undetectable)
+                STEALTH (Slow, reliable)
               </div>
             </SelectItem>
             <SelectItem value="aggressive" className="font-mono hover:bg-red-950 focus:bg-red-950">
               <div className="flex items-center gap-2">
-                <Scan className="h-3 w-3 text-red-400" />
-                AGGRESSIVE (Fast, may trigger alarms)
+                <Zap className="h-3 w-3 text-red-400" />
+                AGGRESSIVE (Fast, may timeout)
               </div>
             </SelectItem>
             <SelectItem value="comprehensive" className="font-mono hover:bg-blue-950 focus:bg-blue-950">
               <div className="flex items-center gap-2">
                 <Target className="h-3 w-3 text-blue-400" />
-                COMPREHENSIVE (Full analysis)
+                COMPREHENSIVE (Full 1-1024 scan)
               </div>
             </SelectItem>
             <SelectItem value="custom" className="font-mono hover:bg-yellow-950 focus:bg-yellow-950">
@@ -287,11 +328,26 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                 id="portRange"
                 placeholder={useCommonPorts ? "Common ports" : "1-1024"}
                 {...register('portRange')}
-                disabled={!useCommonPorts}
                 className="terminal-input"
               />
+              <div className="flex flex-wrap gap-2 mt-2">
+                {portPresets.map((preset) => (
+                  <Button
+                    key={preset.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-gray-800 text-gray-400 hover:bg-gray-900"
+                    onClick={() => {
+                      setValue("portRange", preset.value);
+                    }}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
               <p className="text-xs text-gray-500 font-mono">
-                Format: 80,443,8080 or 1-1000
+                Format: 80,443,8080 or 1-1000 (max 50 ports)
               </p>
             </div>
 
@@ -299,10 +355,10 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <Label className="font-mono text-gray-400">TIMEOUT: {timeout}ms</Label>
-                  <span className="text-xs text-gray-500">{timeout < 1000 ? "FAST" : timeout < 3000 ? "BALANCED" : "STEALTH"}</span>
+                  <span className="text-xs text-gray-500">{timeout < 1000 ? "FAST" : timeout < 2000 ? "BALANCED" : "STEALTH"}</span>
                 </div>
                 <Slider
-                  min={100}
+                  min={500}
                   max={5000}
                   step={100}
                   value={[timeout]}
@@ -317,11 +373,11 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <Label className="font-mono text-gray-400">CONCURRENT_CONNECTIONS: {maxConcurrent}</Label>
-                  <span className="text-xs text-gray-500">{maxConcurrent < 20 ? "LOW" : maxConcurrent < 80 ? "MEDIUM" : "HIGH"}</span>
+                  <span className="text-xs text-gray-500">{maxConcurrent < 3 ? "LOW" : maxConcurrent < 6 ? "MEDIUM" : "HIGH"}</span>
                 </div>
                 <Slider
                   min={1}
-                  max={200}
+                  max={10}
                   step={1}
                   value={[maxConcurrent]}
                   onValueChange={([value]) => {
@@ -330,6 +386,9 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
                   }}
                   className="[&>span]:bg-green-500"
                 />
+                <p className="text-xs text-gray-500">
+                  Higher values are faster but may trigger firewalls
+                </p>
               </div>
             </div>
           </CardContent>
@@ -345,6 +404,14 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
           </AlertDescription>
         </Alert>
       )}
+
+      {/* Real Scan Warning */}
+      <Alert className="border-yellow-500/30 bg-yellow-950/20">
+        <AlertCircle className="h-4 w-4 text-yellow-500" />
+        <AlertDescription className="text-yellow-300 text-sm">
+          This performs real network scans. Only scan targets you own or have permission to test.
+        </AlertDescription>
+      </Alert>
 
       {/* Botón de escaneo */}
       <div className="pt-4">
@@ -362,14 +429,28 @@ export const PortScanForm = ({ onScanStart, isScanning }: PortScanFormProps) => 
           ) : (
             <>
               <Scan className="mr-2 h-5 w-5" />
-              <span className="font-mono">INITIATE_SCAN</span>
+              <span className="font-mono">INITIATE_REAL_SCAN</span>
             </>
           )}
         </Button>
         <p className="text-center text-xs text-gray-500 mt-2 font-mono">
-          Estimated time: {scanType === "stealth" ? "2-5min" : scanType === "aggressive" ? "30-60s" : "5-10min"}
+          {scanType === "stealth" ? "Estimated: 30-90 seconds" : 
+           scanType === "aggressive" ? "Estimated: 15-45 seconds" : 
+           scanType === "comprehensive" ? "Estimated: 2-5 minutes" : 
+           "Time varies by configuration"}
         </p>
       </div>
     </form>
   );
+};
+
+// Helper function for toast notifications
+const toast = {
+  error: (title: string, options?: any) => {
+    // This would be replaced with actual toast implementation
+    console.error(`[TOAST_ERROR] ${title}:`, options?.description);
+  },
+  warning: (title: string, options?: any) => {
+    console.warn(`[TOAST_WARNING] ${title}:`, options?.description);
+  }
 };
