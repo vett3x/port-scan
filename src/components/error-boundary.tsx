@@ -17,6 +17,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
+    console.error("ErrorBoundary caught an error:", error);
     return { hasError: true, error };
   }
 
@@ -27,9 +28,9 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-black text-white p-8">
+        <div className="min-h-screen bg-black text-white p-8 flex flex-col items-center justify-center">
           <h1 className="text-2xl font-bold text-red-500 mb-4">Something went wrong</h1>
-          <pre className="bg-gray-900 p-4 rounded overflow-auto">
+          <pre className="bg-gray-900 p-4 rounded overflow-auto max-w-2xl">
             {this.state.error?.toString()}
           </pre>
           <button
