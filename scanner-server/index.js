@@ -8,7 +8,12 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+// Configuración de CORS para permitir todas las peticiones (necesario en desarrollo)
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type', 'X-Real-Verification', 'X-Real-Scan'],
+}));
 app.use(express.json());
 
 // Validar que nmap esté instalado
@@ -146,12 +151,101 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Servidor de escaneo funcionando' });
 });
 
+// Endpoint de verificación (para la aplicación web)
+app.get('/api/verify', async (req, res) => {
+  const isRealVerification = req.headers['x-real-verification'] === 'true';
+  
+  if (!isRealVerification) {
+    return res.status(403).json({ error: 'Verification header missing' });
+  }
+
+  let nmapInstalled = false;
+  let nmapPath = 'N/A';
+  let nmapVersion = 'N/A';
+  let nmapRawOutput = '';
+  
+  try {
+    const { stdout: whichOutput } = await execPromise('which nmap');
+    nmapPath = whichOutput.trim();
+    
+    const { stdout: versionOutput } = await execPromise('nmap --version');
+    nmapRawOutput = versionOutput;
+    const versionMatch = versionOutput.match(/Nmap version (\S+)/);
+    if (versionMatch) {
+      nmapVersion = versionMatch[1];
+    }
+    nmapInstalled = true;
+  } catch (error) {
+    console.error('Nmap check failed:', error.message);
+  }
+  
+  // Prueba de escaneo real (ej. puerto 22 en localhost)
+  let realScanTest = {
+    success: false,
+    command: 'nmap -p 22 127.0.0.1',
+    duration: 0,
+    portStatus: 'unknown',
+    service: 'N/A',
+    rawOutput: '',
+    error: 'Test not executed'
+  };
+  
+  if (nmapInstalled) {
+    const startTime = Date.now();
+    try {
+      const { stdout: testOutput } = await execPromise(realScanTest.command, { timeout: 5000 });
+      realScanTest.duration = Date.now() - startTime;
+      realScanTest.rawOutput = testOutput;
+      
+      const statusMatch = testOutput.match(/22\/tcp\s+(\S+)\s+(\S+)/);
+      if (statusMatch) {
+        realScanTest.portStatus = statusMatch[1];
+        realScanTest.service = statusMatch[2];
+        realScanTest.success = true;
+        realScanTest.error = undefined;
+      } else {
+        realScanTest.error = 'Nmap output format unexpected';
+      }
+    } catch (error) {
+      realScanTest.duration = Date.now() - startTime;
+      realScanTest.error = `Nmap test failed: ${error.message}`;
+    }
+  }
+
+  res.json({
+    server: {
+      status: 'online',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    },
+    nmap: {
+      installed: nmapInstalled,
+      path: nmapPath,
+      version: nmapVersion,
+      rawOutput: nmapRawOutput.substring(0, 500),
+    },
+    realScanTest,
+    proof: {
+      isReal: nmapInstalled && realScanTest.success,
+      evidence: [
+        `Nmap installed: ${nmapInstalled}`,
+        `Nmap version: ${nmapVersion}`,
+        `Test command executed: ${realScanTest.command}`,
+        `Test duration: ${realScanTest.duration}ms`,
+        `Test result (Port 22): ${realScanTest.portStatus}`,
+        `Server uptime: ${Math.floor(process.uptime() / 3600)}h ${Math.floor((process.uptime() % 3600) / 60)}m`,
+      ]
+    }
+  });
+});
+
 // Iniciar servidor
 async function startServer() {
   const nmapInstalled = await checkNmap();
   if (!nmapInstalled) {
     console.log('Por favor, instala nmap antes de continuar.');
-    process.exit(1);
+    // No salir, permitir que el servidor se inicie para mostrar el estado de 'offline'
+    // process.exit(1); 
   }
 
   app.listen(PORT, () => {
