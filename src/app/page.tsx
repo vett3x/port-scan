@@ -25,7 +25,8 @@ import { toast } from 'sonner';
 import { ScanResult } from '@/types/scan';
 
 // URL del servidor de escaneo - configurable por variable de entorno
-const SCAN_SERVER_URL = process.env.NEXT_PUBLIC_SCAN_SERVER_URL || 'http://localhost:3001';
+// Usando la IP del usuario como fallback para facilitar la conexión local
+const SCAN_SERVER_URL = process.env.NEXT_PUBLIC_SCAN_SERVER_URL || 'http://10.10.10.48:3001';
 
 export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
@@ -65,6 +66,7 @@ export default function Home() {
 
   const checkScanServer = async () => {
     try {
+      // Intentar verificar el servidor de escaneo real
       const response = await fetch(`${SCAN_SERVER_URL}/api/verify`, { 
         method: 'GET',
         cache: 'no-store',
@@ -78,14 +80,17 @@ export default function Home() {
           setScanServerStatus('online');
           console.log('✅ Servidor de escaneo REAL verificado:', data.nmap.version);
         } else {
+          // Si responde pero no pasa la prueba de nmap real
           setScanServerStatus('offline');
           console.warn('❌ Servidor de escaneo no usa nmap real');
         }
       } else {
+        // Si responde con error (ej. 500)
         setScanServerStatus('offline');
         console.warn('❌ Servidor de escaneo no responde correctamente');
       }
     } catch (error) {
+      // Si falla la conexión (ej. CORS, Network Error)
       console.error('❌ No se pudo conectar al servidor de escaneo:', error);
       setScanServerStatus('offline');
     }
@@ -142,8 +147,13 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Scan error: ${response.statusText}`);
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { error: `HTTP Error ${response.status}`, message: response.statusText };
+        }
+        throw new Error(errorData.error || `Scan error: ${errorData.message}`);
       }
 
       const data = await response.json();
@@ -288,17 +298,7 @@ export default function Home() {
   const handleTestScanServer = () => {
     toast.info('🔍 Checking REAL scan server...');
     checkScanServer();
-    if (scanServerStatus === 'online') {
-      toast.success('✅ Scan server VERIFIED', {
-        description: '100% real nmap scans available',
-        duration: 5000
-      });
-    } else {
-      toast.error('❌ Scan server NOT VERIFIED', {
-        description: 'Real scans not available. Install server on Proxmox.',
-        duration: 5000
-      });
-    }
+    // Feedback will be provided by the checkScanServer function via toast
   };
 
   const handleInstallServer = () => {
@@ -322,7 +322,7 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-900">
       {/* Animated background elements - solo renderizar en cliente */}
       {isClient && (
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="fixed inset-0 overflow-hidden pointer-events-none z-50">
           {dots.map((dot, i) => (
             <div
               key={i}
