@@ -239,6 +239,11 @@ app.get('/api/verify', async (req, res) => {
   });
 });
 
+// Nueva ruta GET / para verificar la raíz
+app.get('/', (req, res) => {
+  res.send('Real Port Scanner Server is running. Use POST /scan or GET /health.');
+});
+
 // Iniciar servidor
 async function startServer() {
   const nmapInstalled = await checkNmap();
