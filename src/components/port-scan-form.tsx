@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertCircle, Scan, Target, Cpu, Shield, Zap, Globe, Server } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Slider } from "@/components/ui/slider";
+import { toast } from "sonner";
 
 // Esquema de validación con Zod
 const PortScanSchema = z.object({
@@ -468,15 +469,4 @@ export const PortScanForm = ({ onScanStart, isScanning, disabled = false }: Port
       </div>
     </form>
   );
-};
-
-// Helper function for toast notifications
-const toast = {
-  error: (title: string, options?: any) => {
-    // This would be replaced with actual toast implementation
-    console.error(`[TOAST_ERROR] ${title}:`, options?.description);
-  },
-  warning: (title: string, options?: any) => {
-    console.warn(`[TOAST_WARNING] ${title}:`, options?.description);
-  }
 };
