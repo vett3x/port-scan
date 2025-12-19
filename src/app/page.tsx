@@ -146,8 +146,11 @@ export default function Home() {
     });
 
     try {
+      const scanUrl = `${SCAN_SERVER_URL}/scan`;
+      console.log(`[FETCH_API] Attempting POST to: ${scanUrl}`); // Log de la URL
+      
       // Usar el servidor de escaneo externo
-      const response = await fetch(`${SCAN_SERVER_URL}/scan`, {
+      const response = await fetch(scanUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
