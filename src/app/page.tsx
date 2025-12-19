@@ -65,32 +65,46 @@ export default function Home() {
   }, []);
 
   const checkScanServer = async () => {
+    setScanServerStatus('checking');
+    
     try {
-      // Intentar verificar el servidor de escaneo real
-      const response = await fetch(`${SCAN_SERVER_URL}/api/verify`, { 
+      // 1. Prueba de conectividad básica usando /health
+      const healthResponse = await fetch(`${SCAN_SERVER_URL}/health`, { 
+        method: 'GET',
+        cache: 'no-store',
+      });
+      
+      if (!healthResponse.ok) {
+        throw new Error(`Health check failed with status: ${healthResponse.status}`);
+      }
+      
+      // 2. Prueba de verificación real (requiere encabezado)
+      const verifyResponse = await fetch(`${SCAN_SERVER_URL}/api/verify`, { 
         method: 'GET',
         cache: 'no-store',
         headers: {
           'X-Real-Verification': 'true'
         }
       });
-      if (response.ok) {
-        const data = await response.json();
+      
+      if (verifyResponse.ok) {
+        const data = await verifyResponse.json();
         if (data.proof.isReal) {
           setScanServerStatus('online');
           console.log('✅ Servidor de escaneo REAL verificado:', data.nmap.version);
         } else {
-          // Si responde pero no pasa la prueba de nmap real
+          // Si responde OK pero nmap no está instalado o la prueba falla
           setScanServerStatus('offline');
-          console.warn('❌ Servidor de escaneo no usa nmap real');
+          console.warn('❌ Servidor de escaneo no usa nmap real o falló la prueba interna.');
         }
       } else {
-        // Si responde con error (ej. 500)
+        // Si falla la verificación (ej. 403 si el encabezado no se envía correctamente)
         setScanServerStatus('offline');
-        console.warn('❌ Servidor de escaneo no responde correctamente');
+        console.warn(`❌ Verificación fallida. Status: ${verifyResponse.status}`);
       }
+      
     } catch (error) {
-      // Si falla la conexión (ej. CORS, Network Error)
+      // Si falla la conexión (ej. CORS, Network Error, Firewall)
       console.error('❌ No se pudo conectar al servidor de escaneo:', error);
       setScanServerStatus('offline');
     }
@@ -133,7 +147,7 @@ export default function Home() {
 
     try {
       // Usar el servidor de escaneo externo
-      const response = await fetch(`${SCAN_SERVER_URL}/api/scan`, {
+      const response = await fetch(`${SCAN_SERVER_URL}/scan`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
