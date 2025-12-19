@@ -76,27 +76,30 @@ export const RealScanProof = ({ scanResult, scanServerUrl, className }: ScanProo
       });
       
       if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
+        // Intentar leer el cuerpo del error si es posible
+        const errorText = await response.text();
+        throw new Error(`Server responded with ${response.status}: ${errorText.substring(0, 100)}...`);
       }
       
       const data = await response.json();
       setVerification(data);
       
-      if (data.proof.isReal) {
+      if (data.proof?.isReal) {
         toast.success("✅ VERIFICATION PASSED", {
           description: "Scan server is using REAL nmap for 100% authentic scans",
           duration: 5000
         });
       } else {
         toast.warning("⚠️ VERIFICATION WARNING", {
-          description: "Scan server may not be using real nmap",
+          description: "Scan server may not be using real nmap or test failed. Check details.",
           duration: 5000
         });
       }
     } catch (error) {
       console.error("Verification error:", error);
+      setVerification(null); // Clear verification state on failure
       toast.error("❌ VERIFICATION FAILED", {
-        description: "Cannot verify scan server. It may be offline or misconfigured.",
+        description: `Cannot verify scan server. It may be offline or misconfigured. Details: ${error instanceof Error ? error.message : 'Unknown error'}`,
         duration: 5000
       });
     } finally {
@@ -115,34 +118,42 @@ export const RealScanProof = ({ scanResult, scanServerUrl, className }: ScanProo
     const items = [];
     
     if (verification) {
+      const nmap = verification.nmap;
+      const test = verification.realScanTest;
+      const server = verification.server;
+      
+      // NMAP INSTALLED
       items.push({
-        icon: verification.nmap.installed ? CheckCircle : XCircle,
-        color: verification.nmap.installed ? "text-green-500" : "text-red-500",
+        icon: nmap?.installed ? CheckCircle : XCircle,
+        color: nmap?.installed ? "text-green-500" : "text-red-500",
         title: "NMAP INSTALLED",
-        value: verification.nmap.installed ? `v${verification.nmap.version}` : "NOT FOUND",
-        proof: verification.nmap.installed ? `Path: ${verification.nmap.path}` : "Nmap not detected"
+        value: nmap?.installed ? `v${nmap.version}` : "NOT FOUND",
+        proof: nmap?.installed ? `Path: ${nmap.path}` : "Nmap not detected"
       });
       
+      // REAL SCAN TEST
       items.push({
-        icon: verification.realScanTest.success ? CheckCircle : XCircle,
-        color: verification.realScanTest.success ? "text-green-500" : "text-red-500",
+        icon: test?.success ? CheckCircle : XCircle,
+        color: test?.success ? "text-green-500" : "text-red-500",
         title: "REAL SCAN TEST",
-        value: verification.realScanTest.success ? "PASSED" : "FAILED",
-        proof: verification.realScanTest.success 
-          ? `Local port 22: ${verification.realScanTest.portStatus}` 
-          : verification.realScanTest.error || "Test failed"
+        value: test?.success ? "PASSED" : "FAILED",
+        proof: test?.success 
+          ? `Local port 22: ${test.portStatus}` 
+          : test?.error || "Test failed"
       });
       
+      // SERVER UPTIME
       items.push({
         icon: Clock,
         color: "text-blue-500",
         title: "SERVER UPTIME",
-        value: `${Math.floor(verification.server.uptime / 3600)}h ${Math.floor((verification.server.uptime % 3600) / 60)}m`,
-        proof: `Started: ${new Date(verification.server.timestamp).toLocaleTimeString()}`
+        value: server?.uptime ? `${Math.floor(server.uptime / 3600)}h ${Math.floor((server.uptime % 3600) / 60)}m` : "N/A",
+        proof: server?.timestamp ? `Started: ${new Date(server.timestamp).toLocaleTimeString()}` : "N/A"
       });
     }
     
     if (scanResult) {
+      // SCAN AUTHENTICITY
       items.push({
         icon: scanResult.proof?.isRealScan ? CheckCircle : AlertCircle,
         color: scanResult.proof?.isRealScan ? "text-green-500" : "text-yellow-500",
@@ -151,14 +162,16 @@ export const RealScanProof = ({ scanResult, scanServerUrl, className }: ScanProo
         proof: scanResult.metadata?.nmapCommand ? `Command: ${scanResult.metadata.nmapCommand.split(' ')[0]}` : "No command recorded"
       });
       
+      // SCAN DURATION
       items.push({
         icon: Network,
         color: "text-purple-500",
         title: "SCAN DURATION",
-        value: scanResult.duration ? `${scanResult.duration}ms` : "N/A",
+        value: scanResult.duration ? `${scanResult.duration}ms` : scanResult.metadata?.scanDuration || "N/A",
         proof: scanResult.metadata?.scanDuration || "No duration recorded"
       });
       
+      // RAW EVIDENCE
       items.push({
         icon: FileText,
         color: "text-amber-500",
@@ -181,10 +194,10 @@ export const RealScanProof = ({ scanResult, scanServerUrl, className }: ScanProo
               <CardTitle className="font-mono text-green-300 text-sm">SCAN AUTHENTICITY PROOF</CardTitle>
             </div>
             <Badge 
-              variant={verification?.proof.isReal ? "default" : "destructive"} 
+              variant={verification?.proof?.isReal ? "default" : "destructive"} 
               className="font-mono"
             >
-              {verification?.proof.isReal ? "100% REAL" : "UNVERIFIED"}
+              {verification?.proof?.isReal ? "100% REAL" : "UNVERIFIED"}
             </Badge>
           </div>
           <CardDescription className="text-gray-400 text-xs">
@@ -198,11 +211,11 @@ export const RealScanProof = ({ scanResult, scanServerUrl, className }: ScanProo
             <div className="flex items-center gap-3">
               <div className={cn(
                 "p-2 rounded",
-                verification?.proof.isReal 
+                verification?.proof?.isReal 
                   ? "bg-green-500/10 border border-green-500/30" 
                   : "bg-yellow-500/10 border border-yellow-500/30"
               )}>
-                {verification?.proof.isReal ? (
+                {verification?.proof?.isReal ? (
                   <CheckCircle className="h-5 w-5 text-green-400" />
                 ) : (
                   <AlertCircle className="h-5 w-5 text-yellow-400" />
@@ -210,10 +223,10 @@ export const RealScanProof = ({ scanResult, scanServerUrl, className }: ScanProo
               </div>
               <div>
                 <h4 className="font-mono text-sm font-medium">
-                  {verification?.proof.isReal ? "AUTHENTIC NMAP SCANS" : "VERIFICATION REQUIRED"}
+                  {verification?.proof?.isReal ? "AUTHENTIC NMAP SCANS" : "VERIFICATION REQUIRED"}
                 </h4>
                 <p className="text-xs text-gray-500">
-                  {verification?.proof.isReal 
+                  {verification?.proof?.isReal 
                     ? "Scans are executed with real nmap on your Proxmox server" 
                     : "Click verify to confirm scan authenticity"}
                 </p>
@@ -316,7 +329,7 @@ export const RealScanProof = ({ scanResult, scanServerUrl, className }: ScanProo
           )}
           
           {/* Instructions */}
-          {!verification?.proof.isReal && (
+          {!verification?.proof?.isReal && (
             <Alert className="border-yellow-500/30 bg-yellow-950/20">
               <AlertCircle className="h-4 w-4 text-yellow-500" />
               <AlertDescription className="text-yellow-300 text-sm">
@@ -343,7 +356,7 @@ export const RealScanProof = ({ scanResult, scanServerUrl, className }: ScanProo
               <div className="p-2 bg-black/20 rounded">
                 <div className="text-xs text-gray-500 font-mono mb-1">VERIFICATION TIME</div>
                 <div className="text-sm font-mono text-blue-400">
-                  {verification ? new Date(verification.server.timestamp).toLocaleString() : "Not verified"}
+                  {verification.server?.timestamp ? new Date(verification.server.timestamp).toLocaleString() : "Not verified"}
                 </div>
               </div>
             </div>
